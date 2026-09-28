@@ -61,6 +61,7 @@ BloodFlow_release/
 │       └── HeavisideFuncation.m
 │
 ├── docs/figures/                            README 中引用的对比图
+├── docs/index.html 等                        交互式脉搏波查看器（静态网页，本地打开即可，说明见 docs/VIEWER.md）
 ├── LICENSE                                  MIT License
 └── README.md
 ```
@@ -196,6 +197,10 @@ P1_RCLR_model        % RCLR（或在脚本头部切换为 CR / LR）
 完整体循环动脉树（Westerhof / Stergiopulos 55 血管参数集），主动脉根输入半正弦激励，每条血管末端用阻抗反射系数 `Rt`，27 个分叉点逐个用 6 元 Newton 求解。仿真 10 个心动周期至稳态，截取第 10 跳 (t ∈ [7.2, 8.0] s) 在动脉 **1（主动脉根）、8（颈总动脉）、37（股动脉）、54（胫前动脉）** 的流量与压力历史。本工作结果如下（文献基准见 Wang 2014, Fig. 3.10）：
 
 ![1D case 5 computed](docs/figures/1D_case5_computed.png)
+
+![1D case 5 wave spread](docs/figures/1D_case5_wave_spread.png)
+
+一次心跳内脉搏波在 55 条动脉中的传播（颜色 = 当地血压高出舒张压的部分，越深越高；线宽随截面积起伏，变化放大 4 倍显示）。
 
 > 数据来源：`P6m_results.mat`（MacCormack + Crank–Nicolson 混合格式，160000 步 × dt = 5×10⁻⁵ s，含粘弹性壁项 `Cv`）
 

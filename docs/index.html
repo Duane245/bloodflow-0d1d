@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>全身脉搏波 · 55 动脉一维血流模型</title>
+<meta name="description" content="一次心跳里，脉搏波如何从心脏传遍全身 55 条动脉：一维血流模型（0D 心脏 + 1D 动脉 + 0D 末端）的计算结果，可交互播放。">
+<meta property="og:title" content="全身脉搏波 · 55 动脉一维血流模型">
+<meta property="og:description" content="一次心跳里，脉搏波如何从心脏传遍全身 55 条动脉。可交互播放、点击任意血管查看压力与流量曲线。">
+<style>
+  :root { --bg: #F4EFE6; --surface: #FFFBF4; --ink: #241E28; --ink2: #5A5360; --muted: #8A8290; --line: #E2D8C9;
+          --body: #EADFCF; --bodyEdge: #D6C6AE; --accent: #B8322F; --cursor: #241E28; --grid: #ECE3D5; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141117; --surface: #1D1921; --ink: #F0EAE2; --ink2: #C3BAC9; --muted: #8F8697;
+          --line: #332C39; --body: #27212C; --bodyEdge: #3A323F; --accent: #F06A55; --cursor: #F0EAE2; --grid: #2A2430; } }
+  :root[data-theme="dark"] { --bg: #141117; --surface: #1D1921; --ink: #F0EAE2; --ink2: #C3BAC9; --muted: #8F8697;
+          --line: #332C39; --body: #27212C; --bodyEdge: #3A323F; --accent: #F06A55; --cursor: #F0EAE2; --grid: #2A2430; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; padding: 20px 16px; max-width: 1240px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .02em; } .sub { color: var(--ink2); font-size: 13px; margin: 4px 0 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  aside { display: grid; gap: 12px; align-content: start; }
+  #stage { position: relative; }
+  #cv { width: 100%; height: auto; display: block; cursor: crosshair; touch-action: manipulation; }
+  #clock { position: absolute; left: 14px; top: 10px; font-variant-numeric: tabular-nums; color: var(--ink2); font-size: 13px; }
+  #clock b { color: var(--ink); font-size: 22px; font-weight: 600; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button, .seg label { font: inherit; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+  button:hover, .seg label:hover { border-color: var(--muted); }
+  .seg { display: inline-flex; } .seg input { display: none; } .seg label { border-radius: 0; margin-left: -1px; }
+  .seg label:first-of-type { border-radius: 7px 0 0 7px; } .seg label:last-of-type { border-radius: 0 7px 7px 0; }
+  .seg input:checked + label { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink2); margin-top: 10px; }
+  .legend canvas { flex: 1; height: 10px; border-radius: 3px; min-width: 60px; }
+  #vname { font-size: 16px; font-weight: 600; } #vmeta { color: var(--ink2); font-size: 12px; }
+  .chart { margin-top: 8px; } .chart h3 { font-size: 12px; font-weight: 600; color: var(--ink2); margin: 6px 0 2px; }
+  .chart svg { width: 100%; height: 120px; display: block; overflow: visible; }
+  .facts { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .facts li { display: grid; grid-template-columns: 110px 1fr; gap: 2px 10px; align-items: baseline; cursor: pointer; }
+  .facts .big { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .facts .txt { font-size: 13px; color: var(--ink2); } .note { font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px;
+         font-size: 12px; color: var(--ink); white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.12); display: none; font-variant-numeric: tabular-nums; z-index: 5; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 12px; } table.data td, table.data th { border-bottom: 1px solid var(--line); padding: 2px 4px; text-align: right; }
+  table.data th:first-child, table.data td:first-child { text-align: left; }
+  details summary { cursor: pointer; color: var(--ink2); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>一次心跳，全身 55 条动脉里的脉搏波</h1>
+    <p class="sub">一维血流模型（MacCormack + Crank–Nicolson，55 血管网络）稳态心跳的计算结果。颜色 = 脉搏（此刻血压高出该处舒张压多少，可切换为绝对血压），线宽随血管截面起伏（变化放大 4 倍）。点击任意血管查看曲线。</p>
+    <div id="stage" class="card" style="margin-top:12px">
+      <div id="clock"><b id="tval">0.000</b> s　<span id="spdlab">慢放 ×20</span></div>
+      <canvas id="cv" width="760" height="1300" aria-label="全身动脉网络的血压动画"></canvas>
+      <div class="tip" id="tip"></div>
+      <div class="legend"><span id="legLab">血压</span><span id="pmin"></span><canvas id="bar" width="300" height="10"></canvas><span id="pmax"></span><span>kPa</span></div>
+    </div>
+  </section>
+  <aside>
+    <div class="card">
+      <div class="controls">
+        <button id="play" aria-label="播放/暂停">暂停</button>
+        <span class="seg" role="radiogroup" aria-label="播放速度">
+          <input type="radio" name="spd" id="s1" value="1"><label for="s1">实时</label>
+          <input type="radio" name="spd" id="s5" value="5"><label for="s5">×5</label>
+          <input type="radio" name="spd" id="s20" value="20" checked><label for="s20">×20</label>
+        </span>
+        <span class="seg" role="radiogroup" aria-label="颜色显示">
+          <input type="radio" name="mode" id="mP" value="pulse" checked><label for="mP">脉搏</label>
+          <input type="radio" name="mode" id="mA" value="abs"><label for="mA">绝对血压</label>
+        </span>
+      </div>
+      <input type="range" id="slider" min="0" max="800" value="0" step="1" aria-label="心动周期内时间" style="margin-top:10px">
+      <div class="note">一次心跳 0.8 s。脉搏波从心脏走到脚踝只要约 0.2 s，所以默认 20 倍慢放。</div>
+    </div>
+    <div class="card">
+      <div id="vname">点击一条血管</div><div id="vmeta"></div>
+      <div class="controls" style="margin-top:8px" id="nodeSel"></div>
+      <div class="chart"><h3>血压 P（kPa）</h3><svg id="chP" aria-label="血压随时间变化"></svg></div>
+      <div class="chart"><h3>流量 Q（ml/s）</h3><svg id="chQ" aria-label="流量随时间变化"></svg></div>
+      <details style="margin-top:6px"><summary>数据表</summary><div id="tbl"></div></details>
+    </div>
+    <div class="card">
+      <ul class="facts" id="facts"></ul>
+      <div class="note">以上数字均为本模型计算结果。模型末端用简单反射系数，脉压放大比实测（约 1.2–1.8 倍）更明显。</div>
+    </div>
+  </aside>
+  <section class="card" style="grid-column: 1 / -1">
+    <h2 style="font-size:16px;margin:0 0 6px">关于这个模型</h2>
+    <p class="sub" style="margin:0 0 6px">每条动脉按一维可扩张管求解截面积 A 与流量 Q（特征变量 + MacCormack 两步格式，管壁粘弹性项用 Crank–Nicolson 隐式处理），27 个分叉点逐个用 Newton 法求解，28 个末端用反射系数边界。入口为主动脉根的半正弦射血，心率 75 次/分，计算 10 个心跳以上达到周期稳态后，截取最后一个心跳（1 ms 采样）在此播放。</p>
+    <p class="sub" style="margin:0">血管参数：Stergiopulos 等 (1992) / Westerhof 等 (1969) 的 55 动脉参数集；血管名称按 Wang X. (2014) 博士论文表 3.3。血压由管壁定律 P = β(√A − √A₀) 给出。人体布局为示意图（长度大致按比例），不是解剖精确位置。代码：<a href="https://github.com/Duane245/bloodflow-0d1d" style="color:var(--accent)">github.com/Duane245/bloodflow-0d1d</a>（MIT）。</p>
+  </section>
+</main>
+<script src="tree_layout.js"></script>
+<script src="tree_data.js"></script>
+<script>
+// ---------- data ----------
+const V = TREE.vessels, NT = DATA.nt, DT = DATA.dt, PER = DATA.period;
+const dec = b => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); };
+const dec32 = b => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int32Array(u.buffer); };
+const DV = {}; for (const d of DATA.vessels) DV[d.id] = { x: d.x, n: d.x.length, P: dec(d.P), Q: dec32(d.Q), c0: d.c0 };
+const Pat = (id, k, j) => DV[id].P[k * DV[id].n + j] / 100, Qat = (id, k, j) => DV[id].Q[k * DV[id].n + j] / 100;
+const [PA0, PA1] = DATA.Prange;
+// "pulse" = pressure above this point's own diastolic (beat-minimum) pressure: makes the travelling wave stand out
+const Pmin = {}; let PULSE = 0;
+for (const d of DATA.vessels) { const dv = DV[d.id], m = new Float32Array(dv.n).fill(1e9);
+  for (let k = 0; k < NT; k++) for (let j = 0; j < dv.n; j++) m[j] = Math.min(m[j], dv.P[k * dv.n + j] / 100);
+  Pmin[d.id] = m; for (let k = 0; k < NT; k++) for (let j = 0; j < dv.n; j++) PULSE = Math.max(PULSE, dv.P[k * dv.n + j] / 100 - m[j]); }
+let mode = 'pulse', P0 = 0, P1 = PULSE;
+const val = (id, k, j) => mode === 'pulse' ? Pat(id, k, j) - Pmin[id][j] : Pat(id, k, j);
+
+// ---------- geometry: a node's x (cm along the vessel) → point on the drawn polyline ----------
+const cum = {}; for (const v of V) { const c = [0]; for (let i = 1; i < v.pts.length; i++) c.push(c[i - 1] + Math.hypot(v.pts[i][0] - v.pts[i - 1][0], v.pts[i][1] - v.pts[i - 1][1])); cum[v.id] = c; }
+function along(v, f) { const c = cum[v.id], s = f * c[c.length - 1]; let i = 1; while (i < c.length - 1 && c[i] < s) i++;
+  const k = (s - c[i - 1]) / ((c[i] - c[i - 1]) || 1), a = v.pts[i - 1], b = v.pts[i]; return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]; }
+const nodePts = {}; for (const v of V) nodePts[v.id] = DV[v.id].x.map(x => along(v, Math.min(1, x / v.L)));
+
+// ---------- canvas: world cm → canvas px ----------
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d'), VB = { x: -46, y: -3, w: 94, h: 180 };
+const dpr = Math.min(2, window.devicePixelRatio || 1); cv.width = 760 * dpr; cv.height = Math.round(760 * VB.h / VB.w) * dpr;
+const S = cv.width / VB.w; const W2 = ([x, y]) => [(x - VB.x) * S, (y - VB.y) * S];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const smooth = P => { const n = P.length, q = i => W2(P[(i + n) % n]), p = new Path2D(); const f = q(0); p.moveTo(f[0], f[1]);
+  for (let i = 0; i < n; i++) { const p0 = q(i - 1), p1 = q(i), p2 = q(i + 1), p3 = q(i + 2);
+    p.bezierCurveTo(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6, p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6, p2[0], p2[1]); }
+  p.closePath(); return p; };
+const bodyPaths = TREE.body.parts.map(smooth);
+
+// ---------- color: one-hue sequential ramp (pressure = magnitude), separate steps per theme ----------
+const RAMP = { light: ['#D59C8D', '#DE7F69', '#CC5040', '#AE2C27', '#7E1719', '#4A0B10'], dark: ['#4A1217', '#7E1B1F', '#B8332C', '#E0624D', '#F59A7E', '#FFD6C2'] };
+const dark = () => document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function col(p) { if (!isFinite(p)) p = P0; const r = RAMP[dark() ? 'dark' : 'light'], u = Math.max(0, Math.min(1, (p - P0) / (P1 - P0))) * (r.length - 1), i = Math.min(r.length - 2, Math.floor(u)), k = u - i;
+  const a = hex(r[i]), b = hex(r[i + 1]); return `rgb(${a.map((v, j) => Math.round(v + (b[j] - v) * k)).join(',')})`; }
+function drawBar() { P0 = mode === 'pulse' ? 0 : PA0; P1 = mode === 'pulse' ? PULSE : PA1;
+  document.getElementById('legLab').textContent = mode === 'pulse' ? '脉搏（高于舒张压）' : '血压'; const b = document.getElementById('bar'), c = b.getContext('2d'); for (let x = 0; x < b.width; x++) { c.fillStyle = col(P0 + (P1 - P0) * x / (b.width - 1)); c.fillRect(x, 0, 1, b.height); }
+  document.getElementById('pmin').textContent = P0.toFixed(1); document.getElementById('pmax').textContent = P1.toFixed(1); }
+
+// ---------- state ----------
+let T = 0, playing = true, speed = 20, sel = 8, selNode = null, last = performance.now();
+const order = V.slice().sort((a, b) => a.A0 - b.A0);          // wide vessels last (on top)
+function radius(v, p) { const A = Math.pow(p * 1000 / v.beta + Math.sqrt(v.A0), 2), r = Math.sqrt(A / Math.PI), r0 = Math.sqrt(v.A0 / Math.PI);
+  return Math.max(.3, 1.15 * Math.pow(r0, .7) * (1 + 4 * (r / r0 - 1))); }   // drawn width (cm) ∝ r0^0.7 (keeps the aorta from swamping), change ×4
+
+const frame = () => Math.max(0, Math.min(NT - 1, Math.round(T / DT)));
+function draw() {
+  const k = frame();
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.lineJoin = 'round'; ctx.fillStyle = css('--bodyEdge'); ctx.strokeStyle = css('--bodyEdge'); ctx.lineWidth = .9 * S;
+  for (const p of bodyPaths) { ctx.fill(p); ctx.stroke(p); } ctx.fillStyle = css('--body'); for (const p of bodyPaths) ctx.fill(p);
+  ctx.lineCap = 'round';
+  for (const v of order) {
+    const pts = nodePts[v.id], n = pts.length;
+    if (v.id === sel) { ctx.strokeStyle = css('--ink'); ctx.lineWidth = (radius(v, Pat(v.id, k, 0)) + .9) * S; ctx.beginPath(); pts.forEach((p, i) => { const q = W2(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.stroke(); }
+    for (let j = 0; j < n - 1; j++) {
+      const p = (Pat(v.id, k, j) + Pat(v.id, k, j + 1)) / 2, c = (val(v.id, k, j) + val(v.id, k, j + 1)) / 2, a = W2(pts[j]), b = W2(pts[j + 1]);
+      ctx.strokeStyle = col(c); ctx.lineWidth = radius(v, p) * S; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+  }
+  if (selNode != null) { const q = W2(nodePts[sel][selNode]); ctx.fillStyle = css('--surface'); ctx.strokeStyle = css('--ink'); ctx.lineWidth = 2 * dpr;
+    ctx.beginPath(); ctx.arc(q[0], q[1], 5 * dpr, 0, 7); ctx.fill(); ctx.stroke(); }
+  document.getElementById('tval').textContent = (k * DT).toFixed(3);
+  document.getElementById('slider').value = k;
+  cursor(k);
+}
+// rAF timestamps can precede the performance.now() taken at load, so clamp dt ≥ 0 and keep T in [0, PER)
+function tick(now) { const dt = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now; if (playing) T = ((T + dt / speed) % PER + PER) % PER; draw(); requestAnimationFrame(tick); }
+
+// ---------- picking ----------
+function pick(ev) { const r = cv.getBoundingClientRect(), mx = (ev.clientX - r.left) * cv.width / r.width, my = (ev.clientY - r.top) * cv.height / r.height;
+  let best = null, bd = 14 * dpr; for (const v of V) nodePts[v.id].forEach((p, j) => { const q = W2(p), d = Math.hypot(q[0] - mx, q[1] - my); if (d < bd) { bd = d; best = [v.id, j]; } });
+  return best; }
+const tip = document.getElementById('tip'), stage = document.getElementById('stage');
+function showTip(ev, text, dy = 12) { const r = stage.getBoundingClientRect(); tip.textContent = text; tip.style.display = 'block';
+  tip.style.left = (ev.clientX - r.left + 12) + 'px'; tip.style.top = (ev.clientY - r.top + dy) + 'px'; }
+cv.addEventListener('mousemove', ev => { const b = pick(ev); if (!b) { tip.style.display = 'none'; return; }
+  const v = V[b[0] - 1], k = frame(); showTip(ev, `${v.id} ${v.name_zh} · 血压 ${Pat(v.id, k, b[1]).toFixed(2)} kPa（高于舒张压 ${(Pat(v.id, k, b[1]) - Pmin[v.id][b[1]]).toFixed(2)}）`); });
+cv.addEventListener('mouseleave', () => tip.style.display = 'none');
+cv.addEventListener('click', ev => { const b = pick(ev); if (b) select(b[0], b[1]); });
+
+// ---------- charts: one series each (never a dual axis), crosshair tooltip, cursor at the playhead ----------
+function chart(svgId, id, j, get, fmt, unit) {
+  const svg = document.getElementById(svgId), w = svg.clientWidth || 340, h = 120, m = { l: 38, r: 8, t: 6, b: 18 };
+  const ys = Array.from({ length: NT }, (_, k) => get(id, k, j)); let lo = Math.min(...ys), hi = Math.max(...ys); const pad = (hi - lo) * .08 || 1;
+  const X = k => m.l + (w - m.l - m.r) * k / (NT - 1), Y = y => m.t + (h - m.t - m.b) * (1 - (y - lo + pad) / (hi - lo + 2 * pad));
+  let s = [lo, (lo + hi) / 2, hi].map(t => `<line x1="${m.l}" x2="${w - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/><text x="${m.l - 5}" y="${Y(t) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmt(t)}</text>`).join('');
+  if (lo < 0 && hi > 0) s += `<line x1="${m.l}" x2="${w - m.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)" stroke-dasharray="3 3"/><text x="${w - m.r}" y="${Y(0) - 3}" text-anchor="end" font-size="10" fill="var(--muted)">0（以下为反流）</text>`;
+  [0, .2, .4, .6, .8].forEach(t => s += `<text x="${X(Math.min(NT - 1, t / DT))}" y="${h - 3}" text-anchor="middle" font-size="10" fill="var(--muted)">${t.toFixed(1)}s</text>`);
+  s += `<path d="M${ys.map((y, k) => `${X(k).toFixed(1)},${Y(y).toFixed(1)}`).join('L')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+  s += `<line class="cur" y1="${m.t}" y2="${h - m.b}" stroke="var(--cursor)" stroke-width="1"/><circle class="dot" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>`;
+  s += `<rect x="${m.l}" y="0" width="${w - m.l - m.r}" height="${h}" fill="transparent" style="cursor:pointer"/>`;
+  svg.innerHTML = s; svg._g = { X, Y, ys };
+  const kAt = ev => { const r = svg.getBoundingClientRect(); return Math.max(0, Math.min(NT - 1, Math.round((ev.clientX - r.left - m.l) / (w - m.l - m.r) * (NT - 1)))); };
+  svg.onmousemove = ev => { const k = kAt(ev); showTip(ev, `t = ${(k * DT).toFixed(3)} s · ${fmt(ys[k])} ${unit}`, -30); };
+  svg.onmouseleave = () => tip.style.display = 'none';
+  svg.onclick = ev => { T = kAt(ev) * DT; };
+}
+function cursor(k) { for (const id of ['chP', 'chQ']) { const s = document.getElementById(id); if (!s._g) continue; const x = s._g.X(k);
+  const c = s.querySelector('.cur'), d = s.querySelector('.dot'); c.setAttribute('x1', x); c.setAttribute('x2', x); d.setAttribute('cx', x); d.setAttribute('cy', s._g.Y(s._g.ys[k])); } }
+function select(id, j) {
+  const v = V[id - 1], dv = DV[id]; sel = id; selNode = j ?? Math.floor((dv.n - 1) / 2);
+  document.getElementById('vname').textContent = `${v.id} · ${v.name_zh}`;
+  document.getElementById('vmeta').textContent = `${v.name_en} · 长 ${v.L} cm · 波速 c₀ ${(dv.c0 / 100).toFixed(1)} m/s · 距入口 ${dv.x[selNode].toFixed(1)} cm`;
+  const ns = document.getElementById('nodeSel'); ns.innerHTML = '';
+  [['入口', 0], ['中点', Math.floor((dv.n - 1) / 2)], ['出口', dv.n - 1]].forEach(([lab, jj]) => { const b = document.createElement('button'); b.textContent = lab;
+    if (jj === selNode) { b.style.background = 'var(--ink)'; b.style.color = 'var(--bg)'; } b.onclick = () => select(id, jj); ns.appendChild(b); });
+  chart('chP', id, selNode, Pat, y => y.toFixed(1), 'kPa'); chart('chQ', id, selNode, Qat, y => y.toFixed(1), 'ml/s');
+  const rows = []; for (let k = 0; k < NT; k += 50) rows.push(`<tr><td>${(k * DT).toFixed(2)}</td><td>${Pat(id, k, selNode).toFixed(2)}</td><td>${Qat(id, k, selNode).toFixed(2)}</td></tr>`);
+  document.getElementById('tbl').innerHTML = `<table class="data"><tr><th>t (s)</th><th>P (kPa)</th><th>Q (ml/s)</th></tr>${rows.join('')}</table>`;
+}
+
+// ---------- facts (all from the model's hook export) ----------
+const H = DATA.hook;
+const facts = [
+  [`${(H.wrist_distance_cm / H.wrist_transit_s / 100).toFixed(1)} m/s`, `脉搏波从心脏到右手腕 ${H.wrist_distance_cm} cm，只用 ${H.wrist_transit_s.toFixed(3)} s`, 8],
+  [`${H.root_velocity_displacement_cm.toFixed(1)} cm`, `同样这段时间里，主动脉根部的血只往前走了这么远`, 1],
+  [`${H.pressure_amplification[0].ratio.toFixed(1)} 倍`, `脚踝（右胫后动脉）的脉压是心脏出口的倍数`, 54],
+  [`${H.femoral_reverse_flow[1].minimum_Q_ml_per_s.toFixed(1)} ml/s`, `每次心跳后，大腿（右股动脉）的血会短暂往回流`, 52],
+];
+document.getElementById('facts').innerHTML = facts.map(([b, t, id]) => `<li data-id="${id}" title="点击查看这条血管"><span class="big">${b}</span><span class="txt">${t}</span></li>`).join('');
+document.querySelectorAll('.facts li').forEach(li => li.onclick = () => select(+li.dataset.id));
+
+// ---------- controls ----------
+document.getElementById('play').onclick = e => { playing = !playing; e.target.textContent = playing ? '暂停' : '播放'; };
+document.querySelectorAll('input[name=spd]').forEach(r => r.onchange = () => { speed = +r.value; document.getElementById('spdlab').textContent = speed === 1 ? '实时' : `慢放 ×${speed}`; });
+document.getElementById('slider').max = NT - 1;
+document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { mode = r.value; drawBar(); });
+document.getElementById('slider').oninput = e => { T = +e.target.value * DT; };
+addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); document.getElementById('play').click(); } });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawBar);
+const q = new URLSearchParams(location.search);
+if (q.has('theme')) document.documentElement.dataset.theme = q.get('theme');
+if (q.has('t')) { T = +q.get('t'); playing = false; document.getElementById('play').textContent = '播放'; }
+drawBar(); select(q.has('v') ? +q.get('v') : 8); requestAnimationFrame(tick);
+</script>
+</body>
+</html>
